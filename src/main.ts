@@ -1,10 +1,8 @@
-import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -12,25 +10,18 @@ async function bootstrap(): Promise<void> {
 
   app.use(helmet());
 
-  const corsOrigins = config.get<string>('CORS_ORIGINS') ?? '';
+  // When CORS_ORIGINS is empty, no cross-origin origin is allowed. We never
+  // reflect an arbitrary origin while sending credentials.
+  const corsOrigins = (config.get<string>('CORS_ORIGINS') ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
   app.enableCors({
-    origin: corsOrigins
-      ? corsOrigins.split(',').map((origin) => origin.trim())
-      : true,
+    origin: corsOrigins.length > 0 ? corsOrigins : false,
     credentials: true,
   });
 
   app.setGlobalPrefix('api/v1');
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
-
-  app.useGlobalFilters(new HttpExceptionFilter());
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('EchoGPT Backend API')
