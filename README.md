@@ -27,7 +27,7 @@ search, and an admin area. Full interactive API docs are served with Swagger.
 
 This backend is being built in phases. See `docs/` and the git log for what is
 implemented so far. Phase 1 (scaffold, database schema, config, health check,
-Swagger, seed) is complete.
+Swagger, seed) and Phase 2 (authentication) are complete.
 
 ## Quick start
 
@@ -248,6 +248,11 @@ Swagger UI: `http://localhost:3000/api/docs`
 | Method | Path                        | Description                          | Auth   |
 | ------ | --------------------------- | ------------------------------------ | ------ |
 | GET    | `/api/v1/health`            | Service and database health check    | Public |
+| POST   | `/api/v1/auth/register`     | Register a new user                  | Public |
+| POST   | `/api/v1/auth/login`        | Log in with email and password       | Public |
+| POST   | `/api/v1/auth/refresh`      | Exchange a refresh token             | Public |
+| POST   | `/api/v1/auth/logout`       | Revoke the current session           | Bearer |
+| POST   | `/api/v1/auth/logout-all`   | Revoke all sessions for the user     | Bearer |
 
 More endpoints are added in later phases.
 
@@ -268,6 +273,11 @@ the latest; I kept the project on CommonJS.
   kept them instead of swapping in another test runner or linter.
 - Account deletion behaviour is documented under "Known limitations" once the
   user module lands in Phase 3.
+- Email verification is a bonus and is only stubbed: registration returns a
+  verification token but no email is sent.
+- Access tokens are checked against the `Session` row on every request, so
+  logout and logout-all take effect immediately (at the cost of one extra query
+  per request).
 
 ## Security decisions
 
