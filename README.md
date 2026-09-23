@@ -29,6 +29,22 @@ This backend is being built in phases. See `docs/` and the git log for what is
 implemented so far. Phase 1 (scaffold, database schema, config, health check,
 Swagger, seed) is complete.
 
+## Quick start
+
+Generate the two secrets you need before running anything:
+
+```sh
+cp .env.example .env
+# 32-byte base64 key used to encrypt provider API keys
+openssl rand -base64 32          # paste into ENCRYPTION_KEY
+# or leave the JWT secrets as long random strings (32+ characters required)
+openssl rand -hex 32             # paste into JWT_ACCESS_SECRET
+openssl rand -hex 32             # paste into JWT_REFRESH_SECRET
+```
+
+Then either run everything with Docker, or run the database in Docker and the
+app locally (both options below).
+
 ## Setup
 
 ### Option A: everything with Docker
@@ -45,16 +61,13 @@ Swagger, seed) is complete.
    openssl rand -base64 32
    ```
 
-2. Start the stack (database + app). The app container runs migrations on start:
+2. Start the stack (database + a one-shot init service + app). The `init`
+   service runs `prisma migrate deploy` and `prisma db seed` and exits; the app
+   waits for it to finish (`service_completed_successfully`), so roles, plans and
+   the admin user are present with no manual step:
 
    ```sh
    docker compose up -d --build
-   ```
-
-3. Seed the database (roles, plans, admin user, provider templates):
-
-   ```sh
-   docker compose exec app npx prisma db seed
    ```
 
 The API is then available on `http://localhost:3000`, with Swagger UI at
@@ -102,7 +115,7 @@ The API is then available on `http://localhost:3000`, with Swagger UI at
 
 | Variable             | Description                                                  | Example                                             |
 | -------------------- | ------------------------------------------------------------ | --------------------------------------------------- |
-| `DATABASE_URL`       | PostgreSQL connection string                                 | `postgresql://echogpt:echogpt@localhost:5432/echogpt?schema=public` |
+| `DATABASE_URL`       | PostgreSQL connection string. Use host `localhost` for local runs and host `postgres` inside Docker Compose. | `postgresql://echogpt:echogpt@localhost:5432/echogpt?schema=public` |
 | `NODE_ENV`           | Runtime environment                                          | `development`                                       |
 | `PORT`               | HTTP port                                                    | `3000`                                              |
 | `CORS_ORIGINS`       | Comma-separated allowed origins                              | `http://localhost:5173`                             |
@@ -249,10 +262,10 @@ npm run build       # compile
 
 ## Assumptions
 
-- Used Prisma 6 instead of Prisma 7 to avoid ESM/CJS compatibility issues with
-  NestJS.
-- NestJS 12 ships with Vitest (not Jest) and oxlint (not ESLint) by default. I
-  kept the generated test and lint tooling instead of swapping it out.
+- Used Prisma 6 (mature and widely documented). It is two major versions behind
+the latest; I kept the project on CommonJS.
+- NestJS 12 scaffolds Vitest (not Jest) and oxlint (not ESLint) by default. I
+  kept them instead of swapping in another test runner or linter.
 - Account deletion behaviour is documented under "Known limitations" once the
   user module lands in Phase 3.
 
