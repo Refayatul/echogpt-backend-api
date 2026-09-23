@@ -17,5 +17,7 @@ RUN npm ci --omit=dev
 COPY prisma ./prisma
 RUN npx prisma generate
 COPY --from=build /app/dist ./dist
+# The node image ships an unprivileged "node" user; run as that instead of root.
+USER node
 EXPOSE 3000
 CMD ["node", "dist/main"]
