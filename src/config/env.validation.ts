@@ -8,14 +8,25 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   PORT: Joi.number().default(3000),
   DATABASE_URL: Joi.string().required(),
-  CORS_ORIGINS: Joi.string().default(''),
-  ENCRYPTION_KEY: Joi.string().required(),
-  JWT_ACCESS_SECRET: Joi.string().required(),
-  JWT_REFRESH_SECRET: Joi.string().required(),
+  CORS_ORIGINS: Joi.string().allow('').default(''),
+  ENCRYPTION_KEY: Joi.string()
+    .required()
+    .custom((value: string, helpers) => {
+      const bytes = Buffer.from(value, 'base64');
+      if (bytes.length !== 32) {
+        return helpers.error('any.invalid');
+      }
+      return value;
+    }, 'valid 32-byte base64 key')
+    .messages({
+      'any.invalid': 'ENCRYPTION_KEY must be a base64 string that decodes to 32 bytes',
+    }),
+  JWT_ACCESS_SECRET: Joi.string().min(32).required(),
+  JWT_REFRESH_SECRET: Joi.string().min(32).required(),
   JWT_ACCESS_TTL: Joi.string().default('15m'),
   JWT_REFRESH_TTL: Joi.string().default('7d'),
   ADMIN_EMAIL: Joi.string().email().required(),
-  ADMIN_PASSWORD: Joi.string().min(8).required(),
+  ADMIN_PASSWORD: Joi.string().min(12).required(),
   AI_MOCK_MODE: Joi.string().valid('true', 'false').default('true'),
   OPENAI_API_KEY: Joi.string().allow('').default(''),
   ANTHROPIC_API_KEY: Joi.string().allow('').default(''),
