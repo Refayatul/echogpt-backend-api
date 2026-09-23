@@ -3,9 +3,32 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+const ADMIN_PASSWORD_PLACEHOLDER = 'change-me-please';
+
+function readAdminCredentials(): { email: string; password: string } {
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
+
+  if (!email) {
+    throw new Error('ADMIN_EMAIL is required to run the seed');
+  }
+  if (!password) {
+    throw new Error('ADMIN_PASSWORD is required to run the seed');
+  }
+  if (password.length < 12) {
+    throw new Error('ADMIN_PASSWORD must be at least 12 characters long');
+  }
+  if (password === ADMIN_PASSWORD_PLACEHOLDER) {
+    throw new Error('ADMIN_PASSWORD must not use the .env.example placeholder');
+  }
+
+  return { email, password };
+}
+
 // Seeds the data the app needs to run: roles, plans, an admin user and a
 // few disabled provider templates. Safe to run more than once.
 async function main(): Promise<void> {
+  const { email: adminEmail, password: adminPassword } = readAdminCredentials();
   const userRole = await prisma.role.upsert({
     where: { name: RoleName.USER },
     update: {},
@@ -30,14 +53,13 @@ async function main(): Promise<void> {
     create: { name: PlanName.PREMIUM, dailyLimit: 500, pricePerMonth: 999 },
   });
 
-  const adminEmail = process.env.ADMIN_EMAIL ?? 'admin@example.com';
-  const adminPassword = process.env.ADMIN_PASSWORD ?? 'admin12345';
   const passwordHash = await bcrypt.hash(adminPassword, 12);
 
   const freePlan = await prisma.plan.findUnique({
     where: { name: PlanName.FREE },
   });
 
+  // Create-only: an existing admin (and their password) is never overwritten.
   const admin = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},
