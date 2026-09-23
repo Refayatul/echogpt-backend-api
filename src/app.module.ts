@@ -5,8 +5,11 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER, APP_PIPE } from '@nestjs/core';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { RolesGuard } from './auth/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 import { envValidationSchema } from './config/env.validation';
@@ -22,8 +25,13 @@ import { PrismaModule } from './prisma/prisma.module';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
     HealthModule,
+    AuthModule,
   ],
   providers: [
+    // Order matters: throttle first, then authenticate, then check roles.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
     {
       provide: APP_PIPE,
       useValue: new ValidationPipe({
