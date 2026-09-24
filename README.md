@@ -26,8 +26,8 @@ search, and an admin area. Full interactive API docs are served with Swagger.
 ## Project status
 
 This backend is being built in phases. See `docs/` and the git log for what is
-implemented so far. Phase 1 (scaffold, database schema, config, health check,
-Swagger, seed) and Phase 2 (authentication) are complete.
+implemented so far. Phases 1–3 (scaffold, database, config, health, Swagger,
+seed, authentication, users) are complete.
 
 ## Quick start
 
@@ -254,6 +254,10 @@ Swagger UI: `http://localhost:3000/api/docs`
 | POST   | `/api/v1/auth/verify-email` | Verify email with the register token | Public |
 | POST   | `/api/v1/auth/logout`       | Revoke the current session           | Bearer |
 | POST   | `/api/v1/auth/logout-all`   | Revoke all sessions for the user     | Bearer |
+| GET    | `/api/v1/users/me`          | Get the current user profile         | Bearer |
+| PATCH  | `/api/v1/users/me`          | Update the current user profile      | Bearer |
+| POST   | `/api/v1/users/me/change-password` | Change password (revokes other sessions) | Bearer |
+| DELETE | `/api/v1/users/me`          | Delete (disable) the account         | Bearer |
 
 More endpoints are added in later phases.
 
@@ -272,8 +276,9 @@ npm run build       # compile
 the latest; I kept the project on CommonJS.
 - NestJS 12 scaffolds Vitest (not Jest) and oxlint (not ESLint) by default. I
   kept them instead of swapping in another test runner or linter.
-- Account deletion behaviour is documented under "Known limitations" once the
-  user module lands in Phase 3.
+- Account deletion is a **soft delete**: the account is disabled and its
+  sessions are revoked, but the row is kept for audit and foreign-key
+  integrity. A hard delete would break the FK constraints from usage logs.
 - Email verification is a bonus and is only stubbed: registration creates a
   one-time, expiring token and returns it in the response. A real system would
   email the token instead of returning it and would never expose it in the body.
