@@ -22,7 +22,9 @@ function readAdminCredentials(): { email: string; password: string } {
     throw new Error('ADMIN_PASSWORD must not use the .env.example placeholder');
   }
 
-  return { email, password };
+  // Login normalises emails to lowercase and trimmed, so the seed must store
+  // the admin email the same way or the admin could never log in.
+  return { email: email.trim().toLowerCase(), password };
 }
 
 // Seeds the data the app needs to run: roles, plans, an admin user and a
