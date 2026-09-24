@@ -51,6 +51,9 @@ model User {
   emailVerified Boolean   @default(false)
   isDisabled    Boolean   @default(false)
   roleId        String
+  // Only a hash of the verification token is stored, plus when it expires.
+  emailVerificationTokenHash   String?
+  emailVerificationExpiresAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
