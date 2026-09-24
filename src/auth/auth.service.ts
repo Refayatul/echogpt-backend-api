@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -14,6 +15,11 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
 const BCRYPT_ROUNDS = 12;
+
+// A fixed hash used to keep login timing constant for unknown emails. The
+// plaintext is not recorded anywhere; this value only needs to be a real hash.
+const DUMMY_PASSWORD_HASH =
+  '$2b$12$C6UzMDM.H6dfI/f/IKcEeO7ZBp8Z0xYx7bHCJK5P1B2wq2Xo4jqLu';
 
 export interface AuthTokens {
   accessToken: string;
@@ -56,7 +62,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     // Email verification is a bonus and is only stubbed: we create a token and
-    // return it, but no email is sent.
+    // return it, but no email is sent. Only the hash is stored, and it expires.
     const emailVerificationToken = randomBytes(32).toString('hex');
 
     const user = await this.prisma.user.create({
@@ -65,6 +71,8 @@ export class AuthService {
         passwordHash,
         name: dto.name,
         roleId: userRole.id,
+        emailVerificationTokenHash: this.hashToken(emailVerificationToken),
+        emailVerificationExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       },
       include: { role: true },
     });
@@ -94,14 +102,14 @@ export class AuthService {
       include: { role: true },
     });
 
-    // Same error for unknown email and wrong password, so we do not reveal
-    // which emails are registered.
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+    // Always run a bcrypt compare, even for an unknown email, so the response
+    // time does not reveal whether the account exists.
+    const passwordMatches = await bcrypt.compare(
+      dto.password,
+      user?.passwordHash ?? DUMMY_PASSWORD_HASH,
+    );
 
-    const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!passwordMatches) {
+    if (!user || !passwordMatches) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -142,11 +150,16 @@ export class AuthService {
       throw new UnauthorizedException('Account is disabled');
     }
 
-    // Rotate: revoke the current session and issue a fresh one.
-    await this.prisma.session.update({
-      where: { id: session.id },
+    // Rotate atomically: only one request can revoke this exact token. Two
+    // concurrent refreshes with the same token result in one success and one
+    // 401, because the second updateMany matches zero rows.
+    const rotated = await this.prisma.session.updateMany({
+      where: { id: session.id, refreshTokenHash: tokenHash, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    if (rotated.count !== 1) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
 
     return this.issueTokens(
       session.user.id,
@@ -167,6 +180,30 @@ export class AuthService {
     await this.prisma.session.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
+    });
+  }
+
+  async verifyEmail(token: string): Promise<void> {
+    const tokenHash = this.hashToken(token);
+    const user = await this.prisma.user.findFirst({
+      where: { emailVerificationTokenHash: tokenHash },
+    });
+
+    if (!user || !user.emailVerificationExpiresAt) {
+      throw new BadRequestException('Invalid verification token');
+    }
+    if (user.emailVerificationExpiresAt < new Date()) {
+      throw new BadRequestException('Verification token has expired');
+    }
+
+    // One-time: clear the token so it cannot be used again.
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: true,
+        emailVerificationTokenHash: null,
+        emailVerificationExpiresAt: null,
+      },
     });
   }
 
