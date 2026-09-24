@@ -37,12 +37,23 @@ export class HttpExceptionFilter implements ExceptionFilter {
       statusCode: status,
       error: this.getErrorName(status),
       message,
-      path: request.originalUrl,
+      // Only the path is returned: a query string may contain a token.
+      path: request.path,
       timestamp: new Date().toISOString(),
     });
   }
 
   private getMessage(exception: unknown): string | string[] {
+    const message = this.rawMessage(exception);
+    // Nest's built-in 404 message embeds the full URL, so strip any query
+    // string from it: it can carry a token.
+    if (typeof message === 'string') {
+      return message.split('?')[0];
+    }
+    return message;
+  }
+
+  private rawMessage(exception: unknown): string | string[] {
     if (exception instanceof HttpException) {
       const res = exception.getResponse();
       if (typeof res === 'string') {

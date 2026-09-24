@@ -29,7 +29,8 @@ export class RequestLoggerMiddleware implements NestMiddleware {
           data: {
             userId,
             method: request.method,
-            path: request.originalUrl,
+            // Store only the path: query strings can contain tokens or secrets.
+            path: request.path,
             statusCode: response.statusCode,
             durationMs,
           },
