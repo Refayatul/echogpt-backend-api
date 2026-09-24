@@ -15,7 +15,9 @@ describe('AuthService', () => {
   let prisma: {
     user: {
       findUnique: ReturnType<typeof vi.fn>;
+      findFirst: ReturnType<typeof vi.fn>;
       create: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
     };
     role: { findUnique: ReturnType<typeof vi.fn> };
     session: {
@@ -29,7 +31,7 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     prisma = {
-      user: { findUnique: vi.fn(), create: vi.fn() },
+      user: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
       role: { findUnique: vi.fn() },
       session: {
         create: vi.fn(),
@@ -157,19 +159,47 @@ describe('AuthService', () => {
         role: { name: RoleName.USER },
       },
     });
-    prisma.session.update.mockResolvedValue({});
+    prisma.session.updateMany.mockResolvedValue({ count: 1 });
     prisma.session.create.mockResolvedValue({});
 
     const tokens = await service.refresh('a-refresh-token');
     expect(tokens.accessToken).toBe('signed-token');
-    // The old session is revoked as part of rotation.
-    expect(prisma.session.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { revokedAt: expect.any(Date) } }),
+    // Rotation is atomic: it revokes the exact token hash and expects one row.
+    expect(prisma.session.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ revokedAt: null }),
+        data: { revokedAt: expect.any(Date) },
+      }),
     );
+  });
 
-    prisma.session.findFirst.mockResolvedValue(null);
+  it('rejects a refresh when the token was already rotated', async () => {
+    prisma.session.findFirst.mockResolvedValue({
+      id: 'session-1',
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 1000 * 60),
+      userAgent: null,
+      ipAddress: null,
+      user: {
+        id: 'user-1',
+        email: 'login@example.com',
+        isDisabled: false,
+        role: { name: RoleName.USER },
+      },
+    });
+    // Zero rows updated means another request already consumed the token.
+    prisma.session.updateMany.mockResolvedValue({ count: 0 });
+
     await expect(service.refresh('a-refresh-token')).rejects.toBeInstanceOf(
       UnauthorizedException,
+    );
+    expect(prisma.session.create).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 for an invalid verification token', async () => {
+    prisma.user.findFirst = vi.fn().mockResolvedValue(null);
+    await expect(service.verifyEmail('bad-token')).rejects.toThrow(
+      'Invalid verification token',
     );
   });
 
