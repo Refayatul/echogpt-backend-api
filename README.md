@@ -251,6 +251,7 @@ Swagger UI: `http://localhost:3000/api/docs`
 | POST   | `/api/v1/auth/register`     | Register a new user                  | Public |
 | POST   | `/api/v1/auth/login`        | Log in with email and password       | Public |
 | POST   | `/api/v1/auth/refresh`      | Exchange a refresh token             | Public |
+| POST   | `/api/v1/auth/verify-email` | Verify email with the register token | Public |
 | POST   | `/api/v1/auth/logout`       | Revoke the current session           | Bearer |
 | POST   | `/api/v1/auth/logout-all`   | Revoke all sessions for the user     | Bearer |
 
@@ -273,8 +274,9 @@ the latest; I kept the project on CommonJS.
   kept them instead of swapping in another test runner or linter.
 - Account deletion behaviour is documented under "Known limitations" once the
   user module lands in Phase 3.
-- Email verification is a bonus and is only stubbed: registration returns a
-  verification token but no email is sent.
+- Email verification is a bonus and is only stubbed: registration creates a
+  one-time, expiring token and returns it in the response. A real system would
+  email the token instead of returning it and would never expose it in the body.
 - Access tokens are checked against the `Session` row on every request, so
   logout and logout-all take effect immediately (at the cost of one extra query
   per request).
@@ -294,10 +296,16 @@ the latest; I kept the project on CommonJS.
 ## Known limitations
 
 - Real provider adapters (OpenAI, Anthropic, Gemini) are written from the
-  official documentation but were **not** tested against the live APIs, because
-  no API keys were available. A mock adapter answers requests when
-  `AI_MOCK_MODE=true` or when a provider has no key configured.
-- Refresh-token reuse detection (token families) is not implemented.
+  official documentation. See the note below on which were tested live.
+- No refresh-token **family** reuse detection: rotating revokes the old session,
+  but a stolen refresh token used before the real user refreshes is not detected
+  as a family-wide breach.
+- The throttler uses in-memory storage, so limits are per-process and reset on
+  restart. They are not shared across instances.
+- IP throttling sits behind the proxy setting: if the app runs behind a reverse
+  proxy without trusting `X-Forwarded-For`, every client shares one bucket.
+- Expired sessions are not purged. They remain as rows (revoked/expired) until a
+  cleanup job is added.
 
 ## What was not built
 
