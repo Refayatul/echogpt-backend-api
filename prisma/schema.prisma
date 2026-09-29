@@ -132,6 +132,9 @@ model AiProvider {
   userId       String
   type         ProviderType
   label        String
+  // Model name sent to the provider (e.g. "gemini-2.5-flash"). Stored per
+  // provider so switching models never needs a code change.
+  model        String       @default("")
   apiKeyCipher String
   apiKeyIv     String
   apiKeyTag    String
@@ -143,6 +146,7 @@ model AiProvider {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, isDefault])
 }
 
 model Conversation {

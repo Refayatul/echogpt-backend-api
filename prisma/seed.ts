@@ -86,10 +86,10 @@ async function main(): Promise<void> {
 
   // Disabled provider templates with empty encrypted keys. They exist so the
   // admin UI has rows to show; real keys are added per user later.
-  const templates: { type: ProviderType; label: string }[] = [
-    { type: ProviderType.OPENAI, label: 'OpenAI (template)' },
-    { type: ProviderType.CLAUDE, label: 'Claude (template)' },
-    { type: ProviderType.GEMINI, label: 'Gemini (template)' },
+  const templates: { type: ProviderType; label: string; model: string }[] = [
+    { type: ProviderType.OPENAI, label: 'OpenAI (template)', model: 'gpt-4o-mini' },
+    { type: ProviderType.CLAUDE, label: 'Claude (template)', model: 'claude-sonnet-4-5' },
+    { type: ProviderType.GEMINI, label: 'Gemini (template)', model: 'gemini-2.5-flash' },
   ];
 
   for (const template of templates) {
@@ -102,6 +102,7 @@ async function main(): Promise<void> {
           userId: admin.id,
           type: template.type,
           label: template.label,
+          model: template.model,
           apiKeyCipher: '',
           apiKeyIv: '',
           apiKeyTag: '',
