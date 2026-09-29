@@ -54,11 +54,15 @@ export class ChatService {
   ) {}
 
   async send(userId: string, dto: SendMessageDto): Promise<ChatResponseDto> {
-    // Quota is checked before the provider call so an over-limit user never
-    // spends a paid upstream request.
+    // The provider is resolved BEFORE any quota is consumed. A request that
+    // can never succeed (unknown provider, disabled provider) must not cost
+    // the user one of their daily requests.
+    const provider = await this.resolveProvider(userId, dto);
+
+    // Quota is then checked before the provider call, so an over-limit user
+    // never spends a paid upstream request.
     await this.subscriptions.consumeUsage(userId);
 
-    const provider = await this.resolveProvider(userId, dto);
     const { conversationId, history } = await this.resolveConversation(
       userId,
       dto,
