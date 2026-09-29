@@ -10,11 +10,16 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { AdminModule } from './admin/admin.module';
+import { ChatModule } from './chat/chat.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 import { envValidationSchema } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ProvidersModule } from './providers/providers.module';
+import { SearchModule } from './search/search.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -28,6 +33,11 @@ import { UsersModule } from './users/users.module';
     HealthModule,
     AuthModule,
     UsersModule,
+    SubscriptionsModule,
+    ProvidersModule,
+    ChatModule,
+    SearchModule,
+    AdminModule,
   ],
   providers: [
     // Order matters: throttle first, then authenticate, then check roles.
