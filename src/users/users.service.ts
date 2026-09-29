@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ProfileDto } from './dto/profile.dto';
@@ -27,9 +29,16 @@ export class UsersService {
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto): Promise<ProfileDto> {
+    // PATCH {} is a no-op: only the fields actually supplied are written, so an
+    // absent name does not get turned into a null or empty string.
+    const data: { name?: string } = {};
+    if (dto.name !== undefined) {
+      data.name = dto.name;
+    }
+
     const user = await this.prisma.user.update({
       where: { id: userId },
-      data: { name: dto.name },
+      data,
       include: { role: true },
     });
     return this.toProfile(user);
@@ -53,6 +62,14 @@ export class UsersService {
       throw new UnauthorizedException('Current password is incorrect');
     }
 
+    // Reject reusing the current password. The comparison is done against the
+    // stored hash rather than by string-comparing the plaintexts, so it is a
+    // real bcrypt check and reveals nothing about the hash.
+    const newMatches = await bcrypt.compare(dto.newPassword, user.passwordHash);
+    if (newMatches) {
+      throw new BadRequestException('New password must be different from the current one');
+    }
+
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
 
     await this.prisma.$transaction([
@@ -70,12 +87,29 @@ export class UsersService {
   }
 
   async deleteAccount(userId: string): Promise<void> {
-    // Soft delete: the account is disabled and marked unverified, but the row
-    // is kept for audit and foreign-key integrity. Sessions are all revoked.
+    // Soft delete: the row is kept for audit and foreign-key integrity, but the
+    // personal data is anonymized so a deleted account is not still holding a
+    // usable email address and name.
+    //
+    // Anonymizing (rather than only setting isDisabled) is also what lets the
+    // address be re-registered: the original email is freed by the update.
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: userId },
-        data: { isDisabled: true, emailVerified: false },
+        data: {
+          isDisabled: true,
+          emailVerified: false,
+          email: `deleted-${userId}@deleted.invalid`,
+          name: 'Deleted User',
+          // A random hash means the original password can no longer be
+          // verified even if the user row were read directly.
+          passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), BCRYPT_ROUNDS),
+        },
       }),
       this.prisma.session.updateMany({
         where: { userId, revokedAt: null },

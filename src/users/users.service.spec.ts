@@ -1,4 +1,4 @@
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { RoleName } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -69,6 +69,20 @@ describe('UsersService', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('rejects reusing the current password as the new one', async () => {
+    const passwordHash = await bcrypt.hash('correct-password', 4);
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-1', passwordHash });
+
+    await expect(
+      service.changePassword('user-1', 'session-1', {
+        currentPassword: 'correct-password',
+        newPassword: 'correct-password',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    // The password must not be rewritten when the new value is the old one.
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('changes the password and revokes sessions other than the current one', async () => {
     const passwordHash = await bcrypt.hash('correct-password', 4);
     prisma.user.findUnique.mockResolvedValue({ id: 'user-1', passwordHash });
@@ -87,17 +101,37 @@ describe('UsersService', () => {
     );
   });
 
-  it('soft-deletes by disabling the account and revoking sessions', async () => {
+  it('soft-deletes by anonymizing the account and revoking sessions', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
     prisma.user.update.mockResolvedValue({});
     prisma.session.updateMany.mockResolvedValue({ count: 2 });
 
     await service.deleteAccount('user-1');
 
+    // The email is freed by anonymizing it, so the original address can be
+    // registered again by a new account.
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { isDisabled: true, emailVerified: false },
+        data: expect.objectContaining({
+          isDisabled: true,
+          emailVerified: false,
+          email: 'deleted-user-1@deleted.invalid',
+          name: 'Deleted User',
+        }),
       }),
     );
     expect(prisma.session.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('replaces the password hash on delete so the old one stops working', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
+    prisma.user.update.mockResolvedValue({});
+    prisma.session.updateMany.mockResolvedValue({ count: 0 });
+
+    await service.deleteAccount('user-1');
+
+    const { data } = prisma.user.update.mock.calls[0][0];
+    // A random value, so it is not comparable to any real password hash.
+    expect(data.passwordHash).toMatch(/^\$2[aby]\$12\$/);
   });
 });
