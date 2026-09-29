@@ -311,6 +311,26 @@ calls an external API. To use a real provider:
 
 3. Send a prompt as normal.
 
+## API documentation
+
+Swagger UI is served at `/api/docs` while the app runs. A checked-in export is
+also committed for reviewers who do not want to start the app:
+
+- `docs/openapi.json` - the full OpenAPI 3 document
+- `docs/postman_collection.json` - a Postman v2.1 collection, grouped by tag,
+  with a saved example body on the requests a reviewer would run first
+
+Regenerate both after changing any controller, DTO or decorator:
+
+```sh
+npm run build      # required: the export runs against ts-node + the real tsconfig
+npm run export:docs
+```
+
+In Postman, set the collection variables before running anything:
+`baseUrl` (defaults to `http://localhost:3000/api/v1`) and `accessToken`
+(paste the token returned by `POST /auth/login`).
+
 ## Running tests
 
 ```sh
@@ -377,7 +397,14 @@ If you want 429 instead, it is a one-line change in
 ## Assumptions
 
 - Used Prisma 6 (mature and widely documented). It is two major versions behind
-the latest; I kept the project on CommonJS.
+  the latest; I kept the project on CommonJS.
+- **Do not run the app with `tsx`.** `npm run start:dev` (`nest start`), the
+  production path (`node dist/main.js`) and Docker all work, but under `tsx`
+  the esbuild transform makes the emitted decorator metadata resolve
+  `ProvidersService`'s `PrismaService` dependency to `undefined`, and the DI
+  graph fails to build. `tsx` is still used for the Prisma seed and now for
+  nothing else; the OpenAPI/Postman export runs under `ts-node`
+  (`npm run export:docs`), which compiles with the project's real tsconfig.
 - NestJS 12 scaffolds Vitest (not Jest) and oxlint (not ESLint) by default. I
   kept them instead of swapping in another test runner or linter.
 - Account deletion is a **soft delete**: the account is disabled and its
