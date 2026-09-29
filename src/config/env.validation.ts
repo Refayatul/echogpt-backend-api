@@ -28,7 +28,7 @@ export const envValidationSchema = Joi.object({
   ADMIN_EMAIL: Joi.string().email().required(),
   ADMIN_PASSWORD: Joi.string().min(12).required(),
   AI_MOCK_MODE: Joi.string().valid('true', 'false').default('true'),
-  OPENAI_API_KEY: Joi.string().allow('').default(''),
-  ANTHROPIC_API_KEY: Joi.string().allow('').default(''),
-  GEMINI_API_KEY: Joi.string().allow('').default(''),
+  // Provider API keys are never read from the environment: each user stores
+  // their own encrypted key through POST /providers.
+  SEARCH_CACHE_TTL_MINUTES: Joi.number().integer().min(1).max(10080).default(360),
 });

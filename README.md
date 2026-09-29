@@ -25,9 +25,10 @@ search, and an admin area. Full interactive API docs are served with Swagger.
 
 ## Project status
 
-This backend is being built in phases. See `docs/` and the git log for what is
-implemented so far. Phases 1–3 (scaffold, database, config, health, Swagger,
-seed, authentication, users) are complete.
+All seven feature areas of the assignment are implemented: authentication, user
+management, subscriptions with usage limits, AI provider management, chat
+(including streaming), web search, and the admin area. See the endpoint table
+below and the git log for the history.
 
 ## Quick start
 
@@ -126,10 +127,12 @@ The API is then available on `http://localhost:3000`, with Swagger UI at
 | `JWT_REFRESH_TTL`    | Refresh token lifetime                                       | `7d`                                                |
 | `ADMIN_EMAIL`        | Email of the seeded admin user                               | `admin@example.com`                                 |
 | `ADMIN_PASSWORD`     | Password of the seeded admin user                            | `change-me-please`                                  |
-| `AI_MOCK_MODE`       | When `true`, provider calls use the mock adapter             | `true`                                              |
-| `OPENAI_API_KEY`     | Optional OpenAI key (used by provider health checks)         | empty                                               |
-| `ANTHROPIC_API_KEY`  | Optional Anthropic key                                       | empty                                               |
-| `GEMINI_API_KEY`     | Optional Google Gemini key                                   | empty                                               |
+| `AI_MOCK_MODE`       | When `true`, chat answers come from a mock adapter and no external AI API is called | `true`                                              |
+| `SEARCH_CACHE_TTL_MINUTES` | How long a cached web search stays fresh (max 10080)         | `360`                                               |
+
+Provider API keys are **not** environment variables. Each user adds their own
+key through `POST /api/v1/providers`, and it is stored encrypted. This means no
+AI credential is ever committed to the repository.
 
 Environment variables are validated at startup with Joi. The app refuses to
 start if a required value is missing or malformed.
@@ -258,17 +261,81 @@ Swagger UI: `http://localhost:3000/api/docs`
 | PATCH  | `/api/v1/users/me`          | Update the current user profile      | Bearer |
 | POST   | `/api/v1/users/me/change-password` | Change password (revokes other sessions) | Bearer |
 | DELETE | `/api/v1/users/me`          | Delete (disable) the account         | Bearer |
+| GET    | `/api/v1/subscriptions/plans` | List the available plans           | Bearer |
+| GET    | `/api/v1/subscriptions/status` | Subscription and usage for today   | Bearer |
+| GET    | `/api/v1/subscriptions/remaining` | Remaining daily allowance        | Bearer |
+| PATCH  | `/api/v1/subscriptions`     | Upgrade or downgrade the plan        | Bearer |
+| POST   | `/api/v1/subscriptions/cancel` | Cancel the active subscription    | Bearer |
+| GET    | `/api/v1/providers`         | List the user's AI providers         | Bearer |
+| POST   | `/api/v1/providers`         | Add a provider (key is encrypted)    | Bearer |
+| GET    | `/api/v1/providers/:id`     | Get one provider                     | Bearer |
+| PATCH  | `/api/v1/providers/:id`     | Edit a provider (including the key)  | Bearer |
+| DELETE | `/api/v1/providers/:id`     | Delete a provider                    | Bearer |
+| POST   | `/api/v1/providers/:id/default` | Set the default provider         | Bearer |
+| GET    | `/api/v1/providers/:id/health` | Provider health check             | Bearer |
+| POST   | `/api/v1/chat/messages`    | Send a prompt, get the AI response   | Bearer |
+| POST   | `/api/v1/chat/messages/stream` | Send a prompt, stream the response | Bearer |
+| GET    | `/api/v1/chat/conversations` | List conversations                  | Bearer |
+| GET    | `/api/v1/chat/conversations/:id` | Get a conversation with messages | Bearer |
+| DELETE | `/api/v1/chat/conversations/:id` | Delete a conversation           | Bearer |
+| POST   | `/api/v1/search`           | Run a web search                     | Bearer |
+| GET    | `/api/v1/search/history`   | Full search history                  | Bearer |
+| GET    | `/api/v1/search/recent`    | Most recent searches                 | Bearer |
+| GET    | `/api/v1/search/suggestions` | Suggestions from past queries     | Bearer |
+| DELETE | `/api/v1/search/history`   | Clear the search history             | Bearer |
+| GET    | `/api/v1/admin/stats`      | Dashboard statistics                 | Admin  |
+| GET    | `/api/v1/admin/users`      | List users with plan and usage       | Admin  |
+| PATCH  | `/api/v1/admin/users/:id/role` | Change a user's role              | Admin  |
+| PATCH  | `/api/v1/admin/users/:id/status` | Enable or disable a user       | Admin  |
+| GET    | `/api/v1/admin/subscriptions` | List subscriptions                 | Admin  |
+| GET    | `/api/v1/admin/providers`  | All providers across users            | Admin  |
+| GET    | `/api/v1/admin/usage`      | Usage analytics over time            | Admin  |
+| GET    | `/api/v1/admin/logs`       | Request logs                         | Admin  |
+| GET    | `/api/v1/admin/health`     | System health                        | Admin  |
 
-More endpoints are added in later phases.
+### Using a real AI provider
+
+The default `AI_MOCK_MODE=true` returns a clearly labelled mock answer and never
+calls an external API. To use a real provider:
+
+1. Set `AI_MOCK_MODE=false` in `.env` and restart.
+2. Add your key through the API (or the Swagger UI). Do **not** put it in
+   `.env`:
+
+   ```sh
+   curl -X POST http://localhost:3000/api/v1/providers \
+     -H "Authorization: Bearer $ACCESS_TOKEN" \
+     -H 'content-type: application/json' \
+     -d '{"type":"GEMINI","label":"My Gemini","model":"gemini-2.5-flash","apiKey":"YOUR_KEY","isDefault":true}'
+   ```
+
+3. Send a prompt as normal.
 
 ## Running tests
 
 ```sh
-npm run test        # unit tests
-npm run test:e2e    # end-to-end tests (needs a test database)
-npm run lint        # linter
+npm run test        # unit tests (Vitest)
+npm run test:e2e    # end-to-end tests (needs the echogpt_test database)
+npm run lint        # linter (oxlint)
 npm run build       # compile
 ```
+
+The e2e suite needs a separate database so it can never touch dev data:
+
+```sh
+echo "CREATE DATABASE echogpt_test;" | \
+  npx prisma db execute --url "postgresql://echogpt:echogpt@localhost:5432/postgres" --stdin
+
+env DATABASE_URL="postgresql://echogpt:echogpt@localhost:5432/echogpt_test?schema=public" \
+  npx prisma migrate deploy
+env DATABASE_URL="postgresql://echogpt:echogpt@localhost:5432/echogpt_test?schema=public" \
+  ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=e2e-admin-password npx prisma db seed
+npm run test:e2e
+```
+
+`AI_MOCK_MODE` is forced to `true` for the e2e run, so no external AI API is
+contacted. Web search is the one feature the e2e suite does not call, so the
+suite stays offline.
 
 ## Assumptions
 
@@ -293,15 +360,47 @@ the latest; I kept the project on CommonJS.
   of each refresh token is stored in the `Session` row.
 - Provider API keys are encrypted at rest with AES-256-GCM (random 12-byte IV,
   auth tag stored, key from `ENCRYPTION_KEY`). Keys are never returned by the
-  API; only the last four characters are shown.
+  API at all — not even partially. Responses carry only a `hasApiKey` boolean.
+- Keys are sent to providers in a header (`Authorization`, `x-api-key` or
+  `x-goog-api-key`), never in a URL query string, so they cannot end up in proxy
+  or access logs.
+- Upstream error bodies are never echoed to the client. Every provider failure is
+  mapped to a fixed message derived from the HTTP status code, so a misconfigured
+  upstream cannot reflect a key back through an error response.
 - The API is default-deny: a global auth guard protects every route unless it is
   explicitly marked public.
+- Admin routes are guarded by role metadata, and a non-admin gets 403 before the
+  handler runs.
+- Daily quota is checked **before** the provider call, so an over-limit user
+  cannot spend a paid upstream request. A rejected call rolls its usage
+  increment back rather than consuming the user's remaining allowance.
 - Prisma parameterised queries only; no string-built SQL.
+- The global `ValidationPipe` runs with `whitelist` and `forbidNonWhitelisted`,
+  so unknown request fields are rejected rather than silently ignored.
 
 ## Known limitations
 
-- Real provider adapters (OpenAI, Anthropic, Gemini) are written from the
-  official documentation. See the note below on which were tested live.
+- **Which providers were tested live.** **None of them.** All three adapters
+  (OpenAI, Claude, Gemini) were verified only against **mocked HTTP responses**
+  in unit tests, which cover the request shape, the auth header, response
+  parsing and the status-code-to-error mapping. No live call was made to any
+  provider, because no AI API key was available when this was written. The
+  endpoints and models were taken from the current vendor documentation, but
+  real-world behaviour is unverified — expect to need small fixes on first real
+  use. The only outbound call actually exercised live is the web search, which
+  uses a keyless DuckDuckGo endpoint.
+- Streaming is not a true token stream. The upstream adapters return a complete
+  response, which the streaming endpoint replays in word-sized chunks over the
+  same newline-delimited contract a real token stream would use. Swapping in a
+  genuinely streaming upstream later would not change the client contract.
+- The web search backend is the DuckDuckGo Instant Answer API. It needs no API
+  key (so the project runs out of the box) but it is an instant-answer service,
+  not a general web search index, so it returns a curated summary and related
+  topics rather than ranked results for every query.
+- Search suggestions are derived from the user's own past queries rather than a
+  separate suggestion API.
+- Search cache entries are per user: a repeat query by user A never serves
+  user B's cached row.
 - No refresh-token **family** reuse detection: rotating revokes the old session,
   but a stolen refresh token used before the real user refreshes is not detected
   as a family-wide breach.
@@ -311,8 +410,12 @@ the latest; I kept the project on CommonJS.
   proxy without trusting `X-Forwarded-For`, every client shares one bucket.
 - Expired sessions are not purged. They remain as rows (revoked/expired) until a
   cleanup job is added.
+- `ApiUsageLog` rows are written by the request-logger middleware but never
+  pruned, so the table grows without bound.
 
 ## What was not built
 
-- No real payment processing: subscription upgrades are simulated.
-- No live web crawling for the search feature.
+- No real payment processing: subscription upgrades are simulated by pointing
+  the subscription at another plan.
+- No email delivery. Registration returns the verification token in the response
+  instead of emailing it.
