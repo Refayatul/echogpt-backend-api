@@ -5,6 +5,10 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.e2e-spec.ts'],
+    // .kilo/ holds agent scratch worktrees that contain their own copies of the
+    // test files. Without this, vitest collects the duplicates and the suite
+    // runs the same tests several times.
+    exclude: ['**/node_modules/**', '**/dist/**', '.kilo/**'],
     // The e2e tests run against a separate database. These values are test
     // only and never used in production.
     env: {
