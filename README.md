@@ -399,11 +399,13 @@ If you want 429 instead, it is a one-line change in
 - Used Prisma 6 (mature and widely documented). It is two major versions behind
   the latest; I kept the project on CommonJS.
 - **Do not run the app with `tsx`.** `npm run start:dev` (`nest start`), the
-  production path (`node dist/main.js`) and Docker all work, but under `tsx`
-  the esbuild transform makes the emitted decorator metadata resolve
-  `ProvidersService`'s `PrismaService` dependency to `undefined`, and the DI
-  graph fails to build. `tsx` is still used for the Prisma seed and now for
-  nothing else; the OpenAPI/Postman export runs under `ts-node`
+  production path (`node dist/main.js`) and Docker all work. Under `tsx` the
+  esbuild transform does not emit the `design:paramtypes` decorator metadata
+  that Nest resolves constructor dependencies from, so dependency injection
+  cannot work at all and the app would fail to boot. `main.ts` now detects this
+  and exits with a message saying so, rather than a DI stack trace.
+  `tsx` is still used for the Prisma seed (which does not load the Nest DI
+  graph). The OpenAPI/Postman export runs under `ts-node`
   (`npm run export:docs`), which compiles with the project's real tsconfig.
 - NestJS 12 scaffolds Vitest (not Jest) and oxlint (not ESLint) by default. I
   kept them instead of swapping in another test runner or linter.
