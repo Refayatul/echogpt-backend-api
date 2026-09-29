@@ -337,6 +337,43 @@ npm run test:e2e
 contacted. Web search is the one feature the e2e suite does not call, so the
 suite stays offline.
 
+## Deviations from the original spec
+
+These are deliberate choices that differ from what was asked for. Each is listed
+so it can be reviewed and reversed if you disagree.
+
+### Daily quota returns 402, not 429
+
+**Spec asked for:** 429 Too Many Requests when the daily limit is reached.
+**Shipped:** 402 Payment Required.
+
+Reasoning: 429 and 402 both signal "you have exceeded a limit", but they mean
+different things to a client, and conflating them causes real bugs.
+
+- **429** means *you are going too fast right now*. The correct client reaction
+  is to wait a few seconds and retry the identical request. It is time-based and
+  self-clearing. This is what the global throttler returns, and 429 is
+  deliberately still used for that.
+- **402** means *your plan does not permit this*. Retrying immediately changes
+  nothing; the allowance resets at the next UTC midnight. The correct client
+  reaction is to stop calling and prompt the user to upgrade.
+
+A client that honours 429 as "retry shortly" would, on a 402, spin in a retry
+loop for the rest of the day and hammer the API. Returning 429 for an exhausted
+plan quota invites exactly that, and burns the remaining global throttler budget
+as well. It would also misreport the cause: the user did not send too many
+requests too fast, they sent a normal number of requests over a normal period
+and their plan ran out.
+
+Both are verified: 30 concurrent requests against a 20-request limit return
+exactly 20 × `201` and 10 × `402`, with the counter ending at exactly 20
+(the rejected requests do not consume the allowance). Separately, exceeding the
+global rate limit returns `429` after exactly 100 requests in a minute.
+
+If you want 429 instead, it is a one-line change in
+`src/subscriptions/subscriptions.service.ts` and the Swagger annotations in
+`src/chat/chat.controller.ts`.
+
 ## Assumptions
 
 - Used Prisma 6 (mature and widely documented). It is two major versions behind

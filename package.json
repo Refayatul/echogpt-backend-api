@@ -20,7 +20,9 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
-    "test:e2e": "vitest run --config ./vitest.config.e2e.mts"  },
+    "test:e2e": "vitest run --config ./vitest.config.e2e.mts",
+    "export:docs": "ts-node --project tsconfig.build.json --files scripts/export-docs.ts"
+  },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
@@ -61,6 +63,7 @@
     "prettier": "^3.4.2",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
+    "ts-node": "^10.9.2",
     "tsx": "^4.23.15",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
